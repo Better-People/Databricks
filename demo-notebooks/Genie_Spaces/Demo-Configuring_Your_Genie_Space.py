@@ -1,7 +1,11 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # DBTITLE 1,Demo Introduction
 # MAGIC %md
-# MAGIC # DEMO: Tune Your Genie Space for Better Responses
+# MAGIC # DEMO: Configuring Your Genie Space for Better Responses
 # MAGIC
 # MAGIC This demo continues directly from Demo 1. You already created a `Retail Sales Q&A` Genie Space with three data objects and asked your first natural language questions. Most of them worked — but five specific questions produced wrong, empty, or unreliable results.
 # MAGIC
@@ -38,25 +42,11 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Print schema reference for UI
-# Print schema context and the new assets added by this demo's setup.
-print(f"Catalog : {catalog}")
-print(f"Schema  : {schema}")
-print("")
-print("New assets added by setup (Demo 2):")
-print(f"  TABLE     →  sales_targets")
-print(f"  FUNCTION  →  fn_profit_margin")
-print("")
-print("Action required: add sales_targets to your Genie Space")
-print("  Configure > Data > Add → browse to your schema → select sales_targets")
-
-# COMMAND ----------
-
 # DBTITLE 1,The 5 Failing Questions
 # MAGIC %md
-# MAGIC ## The 5 Questions That Got It Wrong
+# MAGIC ## 5 Questions Our Genie Space Could Get Wrong
 # MAGIC
-# MAGIC After Demo 1, your class kept exploring. Within a few minutes, five questions produced wrong, empty, or unreliable results. Each one reveals a different gap in the space configuration.
+# MAGIC Try these five questions and see if Genie produced wrong, empty, or unreliable results. Each one may reveal a different gap in the space's configuration.
 # MAGIC
 # MAGIC | # | Question asked | What happened | Root cause | Fix we’ll apply |
 # MAGIC |---|---|---|---|---|

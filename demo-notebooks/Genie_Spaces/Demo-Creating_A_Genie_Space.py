@@ -5,7 +5,7 @@
 # ///
 # DBTITLE 1,Demo Introduction
 # MAGIC %md
-# MAGIC # DEMO: Create Your First Genie Space
+# MAGIC # DEMO: Create A Genie Space
 # MAGIC
 # MAGIC This demo is for learners who are brand new to Genie Spaces in Databricks.
 # MAGIC
@@ -38,21 +38,6 @@
 
 # DBTITLE 1,Run setup
 # MAGIC %run ./Setup
-
-# COMMAND ----------
-
-# DBTITLE 1,Print schema reference for UI
-# This cell re-derives your schema name so you can easily copy it
-# into the Unity Catalog browser inside the Genie Space creation dialog.
-print("")
-print("Use this path when browsing for tables in the Genie Space UI:")
-print(f"  Catalog : {catalog}")
-print(f"  Schema  : {schema}")
-print("")
-print("Tables to add to your Genie Space:")
-print("  - sales_orders")
-print("  - customers")
-print("  - vw_monthly_sales")
 
 # COMMAND ----------
 
