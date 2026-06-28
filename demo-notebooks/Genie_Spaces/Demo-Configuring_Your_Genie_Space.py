@@ -7,9 +7,9 @@
 # MAGIC %md
 # MAGIC # DEMO: Configuring Your Genie Space for Better Responses
 # MAGIC
-# MAGIC This demo continues directly from Demo 1. You already created a `Retail Sales Q&A` Genie Space with three data objects and asked your first natural language questions. Most of them worked — but five specific questions produced wrong, empty, or unreliable results.
+# MAGIC This demo continues directly from Demo 1. You already created a `Retail Sales Q&A` Genie Space with three data objects and asked your first natural language questions.
 # MAGIC
-# MAGIC This demo is about diagnosing those five failures and applying every tuning tool Genie provides to fix them. Rather than presenting the tools in isolation, each step solves a real problem that came out of live use.
+# MAGIC This demo is about diagnosing five possible failures and applying every tuning tool Genie provides to fix them. Rather than presenting the tools in isolation, each step solves a real problem that came out of live use.
 # MAGIC
 # MAGIC Your goal in this notebook is to:
 # MAGIC * add plain-text instructions for default behaviour rules
@@ -17,21 +17,11 @@
 # MAGIC * define filter and field expressions for business terminology and segmentation
 # MAGIC * add join relationships so Genie correctly links `sales_orders` to `customers` and `sales_targets`
 # MAGIC * add example queries for complex and anticipated questions
-# MAGIC * build parameterized example queries as verified trusted assets
-# MAGIC * register a Unity Catalog SQL function as a trusted asset
+# MAGIC * build parameterized example queries
+# MAGIC * register a Unity Catalog SQL function
 # MAGIC * add column metadata, descriptions, and synonyms to the knowledge store
 # MAGIC * configure prompt matching for value recognition and spelling correction
 # MAGIC * understand when metric views and Unity Catalog metadata are the right long-term answer
-# MAGIC
-# MAGIC We stay intentionally narrow:
-# MAGIC * no benchmarks
-# MAGIC * no sharing or permissions configuration
-# MAGIC * no agent mode
-# MAGIC
-# MAGIC Before you begin:
-# MAGIC 1. Run the setup cell below — it adds a `sales_targets` table and a SQL function `fn_profit_margin` to your schema.
-# MAGIC 2. **Add `sales_targets` to your existing Genie Space**: in your `Retail Sales Q&A` space, click **Configure > Data > Add**, browse to your schema, and select `sales_targets`.
-# MAGIC 3. Open the Genie Space alongside this notebook — you will switch between the two throughout.
 # MAGIC
 # MAGIC ---
 
@@ -48,13 +38,13 @@
 # MAGIC
 # MAGIC Try these five questions and see if Genie produced wrong, empty, or unreliable results. Each one may reveal a different gap in the space's configuration.
 # MAGIC
-# MAGIC | # | Question asked | What happened | Root cause | Fix we’ll apply |
+# MAGIC | # | Question asked | What might happen | Root cause | Fix we’ll apply |
 # MAGIC |---|---|---|---|---|
 # MAGIC | 1 | *What is our profit?* | Genie returned `net_revenue` as profit, ignoring cost entirely | No definition of “profit” in the space — Genie guessed | SQL Expression (Measure) |
 # MAGIC | 2 | *Show me B2B sales* | Empty result — zero rows returned | `segment` stores `'Corporate'`, not `'B2B'`; Genie couldn’t match the term | Column synonym + entity matching |
 # MAGIC | 3 | *What’s our AOV trend by quarter?* | Genie generated a wrong or inconsistent formula each time | `AOV` is not a column name; Genie guessed the formula differently on each attempt | SQL Expression (Measure) with synonym |
 # MAGIC | 4 | *Are we hitting our regional targets?* | “I don’t have information about sales targets” | `sales_targets` has no defined relationship to `sales_orders`; join not obvious | Join relationship + example query |
-# MAGIC | 5 | *Show me profit margin by category* | Different result on each attempt — Genie wrote a different formula every time | No verified formula; no trusted asset | SQL function (Trusted Asset) |
+# MAGIC | 5 | *Show me profit margin by category* | Different result on each attempt — Genie wrote a different formula every time | No verified formula; | SQL function |
 # MAGIC
 # MAGIC Every step in this demo fixes one or more of these failures. By the end, you will re-test all five and confirm the space responds correctly.
 # MAGIC
@@ -75,7 +65,7 @@
 # MAGIC | **SQL Expression — Field** | Derived grouping attributes: quarter label, order size tier | Configure > Instructions > SQL Expressions |
 # MAGIC | **Join relationships** | Correctly linking two tables without guessing the join key | Configure > Instructions > SQL Expressions |
 # MAGIC | **Example queries** | Complex, multi-step, or frequently anticipated questions | Configure > Instructions > SQL Queries |
-# MAGIC | **Parameterized queries** | Trusted, user-adjustable answers (verified logic) | Configure > Instructions > SQL Queries |
+# MAGIC | **Parameterized queries** | User-adjustable answers (verified logic) | Configure > Instructions > SQL Queries |
 # MAGIC | **SQL functions** | Verified calculations from Unity Catalog (run as-is, no guessing) | Configure > Instructions > SQL Queries |
 # MAGIC | **Column metadata & synonyms** | Teaching Genie business terms at the column level | Configure > Data > [table] > pencil icon |
 # MAGIC | **Prompt matching** | Abbreviation recognition, spelling correction, value mapping | Configure > Data > [table] > column Advanced settings |
@@ -132,7 +122,7 @@
 # MAGIC
 # MAGIC **Measure 1 — Profit**
 # MAGIC * Name: `Profit`
-# MAGIC * Code: `SUM(net_revenue - cost)`
+# MAGIC * Code: `SUM(sales_orders.net_revenue - sales_orders.cost)`
 # MAGIC * Synonyms: `gross profit, net profit, earnings, margin dollars`
 # MAGIC * Instructions: `Use when users ask about profit, earnings, or how much money was made after costs. Do not confuse with net_revenue alone.`
 # MAGIC * Click **Save**.
@@ -141,7 +131,7 @@
 # MAGIC
 # MAGIC **Measure 2 — Profit Margin**
 # MAGIC * Name: `Profit Margin`
-# MAGIC * Code: `ROUND(SUM(net_revenue - cost) / NULLIF(SUM(net_revenue), 0) * 100, 2)`
+# MAGIC * Code: `ROUND(SUM(sales_orders.net_revenue - sales_orders.cost) / NULLIF(SUM(sales_orders.net_revenue), 0) * 100, 2)`
 # MAGIC * Synonyms: `margin, gross margin, margin %, profitability, margin percentage`
 # MAGIC * Instructions: `Returns profit as a percentage of revenue. Results are already multiplied by 100 — display as a percentage. Use NULLIF to avoid division by zero.`
 # MAGIC * Click **Save**.
@@ -150,7 +140,7 @@
 # MAGIC
 # MAGIC **Measure 3 — Average Order Value (AOV)**
 # MAGIC * Name: `Average Order Value`
-# MAGIC * Code: `ROUND(SUM(net_revenue) / NULLIF(COUNT(DISTINCT order_id), 0), 2)`
+# MAGIC * Code: `ROUND(SUM(sales_orders.net_revenue) / NULLIF(COUNT(DISTINCT sales_orders.order_id), 0), 2)`
 # MAGIC * Synonyms: `AOV, average basket, average transaction value, average spend per order`
 # MAGIC * Instructions: `Use when users ask about AOV, average order value, or average basket size. Count distinct order_id to avoid inflating the average.`
 # MAGIC * Click **Save**.
@@ -185,7 +175,7 @@
 # MAGIC 5. Click **Add** and select **Field**.
 # MAGIC 6. Enter:
 # MAGIC    * Name: `Order Size Tier`
-# MAGIC    * Code: `CASE WHEN net_revenue < 100 THEN 'Small' WHEN net_revenue < 500 THEN 'Medium' ELSE 'Large' END`
+# MAGIC    * Code: `CASE WHEN sales_orders.net_revenue < 100 THEN 'Small' WHEN sales_orders.net_revenue < 500 THEN 'Medium' ELSE 'Large' END`
 # MAGIC    * Synonyms: `order tier, deal size, order bucket, size band`
 # MAGIC    * Instructions: `Groups individual orders into Small (under $100), Medium ($100–$499), or Large ($500+) based on net_revenue. Use when users ask to break down results by order size.`
 # MAGIC 7. Click **Save**.
@@ -207,23 +197,25 @@
 # MAGIC **Join 1 — sales_orders → customers**
 # MAGIC
 # MAGIC 1. Click **Configure > Instructions**.
-# MAGIC 2. Click the **SQL Expressions** tab.
-# MAGIC 3. Scroll to the **Joins** section and click **Add join**.
+# MAGIC 2. Click the **Joins** tab.
+# MAGIC 3. Click **Add**.
 # MAGIC 4. In the join editor, enter:
 # MAGIC    * Left table: `sales_orders`
 # MAGIC    * Right table: `customers`
+# MAGIC    * Relationship type: `Many to one` (many orders can belong to one customer)
 # MAGIC    * Join condition: `sales_orders.customer_id = customers.customer_id`
-# MAGIC    * Description: `Links each order to the purchasing customer's profile, including their segment, region, and city. Use this join for any question that asks about customer segment, B2B sales, or city-level breakdowns.`
+# MAGIC    * Instructions: `Links each order to the purchasing customer's profile, including their segment, region, and city. Use this join for any question that asks about customer segment, B2B sales, or city-level breakdowns.`
 # MAGIC 5. Click **Save**.
 # MAGIC
 # MAGIC **Join 2 — sales_orders → sales_targets**
 # MAGIC
-# MAGIC 6. Click **Add join** again.
+# MAGIC 6. Click **Add** again.
 # MAGIC 7. Enter:
 # MAGIC    * Left table: `sales_orders`
 # MAGIC    * Right table: `sales_targets`
+# MAGIC    * Relationship type: `Many to one` (many orders map to one regional quarterly target row)
 # MAGIC    * Join condition: `sales_orders.region = sales_targets.region AND CONCAT('Q', QUARTER(sales_orders.order_date)) = sales_targets.quarter AND YEAR(sales_orders.order_date) = sales_targets.year`
-# MAGIC    * Description: `Links each order to its regional quarterly target. The quarter is derived from order_date using QUARTER() and prefixed with Q to match the sales_targets.quarter format (Q1, Q2, Q3, Q4). Use for any question about targets, goals, or performance vs plan.`
+# MAGIC    * Instructions: `Links each order to its regional quarterly target. The quarter is derived from order_date using QUARTER() and prefixed with Q to match the sales_targets.quarter format (Q1, Q2, Q3, Q4). Use for any question about targets, goals, or performance vs plan.`
 # MAGIC 8. Click **Save**.
 # MAGIC
 # MAGIC > Each join relationship counts as one knowledge store snippet toward the 200 limit.
@@ -244,24 +236,25 @@
 # MAGIC
 # MAGIC 1. Click **Configure > Instructions**.
 # MAGIC 2. Click the **SQL Queries** tab.
-# MAGIC 3. Click **Add SQL query**.
+# MAGIC 3. Click **Add**.
 # MAGIC 4. In the question title field at the top, enter:
 # MAGIC    > How is each region tracking against target this quarter?
 # MAGIC 5. In the SQL editor below, paste the query from the code cell below this one.
+# MAGIC
+# MAGIC > **Important:** Example query SQL runs as literal SQL — there is no implicit schema context. All table references must be fully qualified as `workspace.<your_schema>.table_name`. Replace `<your_schema>` with your actual schema name (e.g. `demo_genie_firstname_lastname_email_com`). You can confirm your schema name by checking the Genie Space's Configure > Data tab.
+# MAGIC
 # MAGIC 6. Click **Usage guidance** near the bottom of the editor.
 # MAGIC 7. Enter: `Use when users ask about target attainment, performance vs plan, or whether regions are hitting their goals. Requires the sales_targets table.`
 # MAGIC 8. Click **Save**.
 # MAGIC
 # MAGIC **Example Query 2 — Segment and Channel Breakdown**
 # MAGIC
-# MAGIC 9. Click **Add SQL query** again.
+# MAGIC 9. Click **Add** again.
 # MAGIC 10. Enter question title:
 # MAGIC     > Show a breakdown of performance by segment and channel
-# MAGIC 11. In the SQL editor, paste the second query from the code cell below.
+# MAGIC 11. In the SQL editor, paste the second query from the code cell below (same schema substitution applies).
 # MAGIC 12. Add usage guidance: `Use when users ask for a performance breakdown without specifying exact columns. This is the canonical breakdown view combining customer segment and order channel.`
 # MAGIC 13. Click **Save**.
-# MAGIC
-# MAGIC > Non-parameterized example queries are not trusted assets — Genie uses them as guidance and may adapt the SQL for similar questions. Only parameterized queries produce verified trusted responses.
 # MAGIC
 # MAGIC ---
 
@@ -269,6 +262,13 @@
 
 # DBTITLE 1,Reference SQL: Example queries to paste
 # MAGIC %sql
+# MAGIC -- =============================================================
+# MAGIC -- IMPORTANT: Replace <your_schema> with your actual schema name
+# MAGIC -- before pasting into the Genie Space SQL editor.
+# MAGIC -- Example: workspace.demo_genie_firstname_lastname_email_com
+# MAGIC -- Your schema name is visible under Configure > Data in the space.
+# MAGIC -- =============================================================
+# MAGIC
 # MAGIC -- =============================================================
 # MAGIC -- EXAMPLE QUERY 1: Region vs Target
 # MAGIC -- Question title: "How is each region tracking against target this quarter?"
@@ -285,8 +285,8 @@
 # MAGIC     WHEN SUM(s.net_revenue) >= t.target_revenue THEN 'On Track'
 # MAGIC     ELSE 'Below Target'
 # MAGIC   END                                                         AS status
-# MAGIC FROM sales_orders s
-# MAGIC JOIN sales_targets t
+# MAGIC FROM workspace.<your_schema>.sales_orders s
+# MAGIC JOIN workspace.<your_schema>.sales_targets t
 # MAGIC   ON  s.region = t.region
 # MAGIC   AND CONCAT('Q', QUARTER(s.order_date)) = t.quarter
 # MAGIC   AND YEAR(s.order_date) = t.year
@@ -306,8 +306,8 @@
 # MAGIC   ROUND(SUM(s.net_revenue), 2)                                            AS total_revenue,
 # MAGIC   ROUND(SUM(s.net_revenue - s.cost), 2)                                   AS total_profit,
 # MAGIC   ROUND(SUM(s.net_revenue - s.cost) / NULLIF(SUM(s.net_revenue),0)*100,2) AS profit_margin_pct
-# MAGIC FROM sales_orders s
-# MAGIC JOIN customers c ON s.customer_id = c.customer_id
+# MAGIC FROM workspace.<your_schema>.sales_orders s
+# MAGIC JOIN workspace.<your_schema>.customers c ON s.customer_id = c.customer_id
 # MAGIC GROUP BY c.segment, s.channel
 # MAGIC ORDER BY total_revenue DESC;
 
@@ -315,32 +315,28 @@
 
 # DBTITLE 1,Step 6 - Parameterized Queries (Trusted Assets)
 # MAGIC %md
-# MAGIC ## Step 6: Add Parameterized Example Queries — Trusted Assets
+# MAGIC ## Step 6: Add Parameterized Example Queries
 # MAGIC
-# MAGIC **Produces:** a verified trusted answer for any region-scoped order question.
+# MAGIC **Produces:** a verified answer for any region-scoped order question.
 # MAGIC
-# MAGIC A parameterized query is an example query that contains a runtime placeholder (`:parameter_name`). When Genie uses it to answer a question, it fills in the parameter value and runs the exact query as written. The response is labelled **Trusted** because the SQL logic has been verified by a space author.
+# MAGIC A parameterized query is an example query that contains a runtime placeholder (`:parameter_name`). When Genie uses it to answer a question, it fills in the parameter value and runs the exact query as written.
 # MAGIC
 # MAGIC 1. Click **Configure > Instructions > SQL Queries**.
-# MAGIC 2. Click **Add SQL query**.
+# MAGIC 2. Click **Add**.
 # MAGIC 3. In the question title field, enter:
 # MAGIC    > Show me all orders for a specific region
-# MAGIC 4. In the SQL editor, paste the query from the code cell below this one.
-# MAGIC 5. Add the parameter:
-# MAGIC    * Place your cursor on the `:region` token in the query, or type `:region` directly in the SQL.
-# MAGIC    * Click the **pencil icon** next to the `region` parameter name in the parameter list.
+# MAGIC 4. In the SQL editor, paste the query from the code cell below this one (same schema substitution applies).
+# MAGIC 5. In the **Parameters** section:
+# MAGIC    * Click the **gear icon** next to the `region` parameter name in the parameter list.
 # MAGIC    * Set **Data type** to `String`.
 # MAGIC    * Set **Comment** to: `The region name. Valid values: Northeast, Southeast, Midwest, West, Northwest`
-# MAGIC    * Click **Save** to close the parameter dialog.
 # MAGIC 6. Add usage guidance: `Use when a user asks to see orders, revenue, or activity for a named region. The user’s region name is passed as the parameter value.`
 # MAGIC 7. Click **Save** to save the example query.
 # MAGIC
 # MAGIC **How to verify it worked:**
 # MAGIC
 # MAGIC Go to the chat window and ask: *Show me all orders for the West region.*
-# MAGIC Genie should return results labelled **Trusted** and show a parameter value of `West`. You can change the parameter value in the response to re-run for a different region without asking a new question.
-# MAGIC
-# MAGIC > Trusted assets are the highest-confidence Genie responses. They run verified SQL with user-supplied values rather than generating SQL from scratch.
+# MAGIC You can change the parameter value in the response to re-run for a different region without asking a new question.
 # MAGIC
 # MAGIC ---
 
@@ -352,7 +348,7 @@
 # MAGIC -- PARAMETERIZED QUERY: Orders for a specific region
 # MAGIC -- Question title: "Show me all orders for a specific region"
 # MAGIC -- Paste this into the Genie Space parameterized example query editor.
-# MAGIC -- The :region token becomes the trusted parameter.
+# MAGIC -- The :region token becomes the parameter.
 # MAGIC -- =============================================================
 # MAGIC
 # MAGIC SELECT
@@ -366,8 +362,8 @@
 # MAGIC   s.quantity,
 # MAGIC   s.net_revenue,
 # MAGIC   ROUND(s.net_revenue - s.cost, 2) AS profit
-# MAGIC FROM sales_orders s
-# MAGIC JOIN customers c ON s.customer_id = c.customer_id
+# MAGIC FROM workspace.<your_schema>.sales_orders s
+# MAGIC JOIN workspace.<your_schema>.customers c ON s.customer_id = c.customer_id
 # MAGIC WHERE s.region = :region
 # MAGIC ORDER BY s.order_date DESC;
 
@@ -375,17 +371,19 @@
 
 # DBTITLE 1,Step 7 - Register SQL Function as Trusted Asset
 # MAGIC %md
-# MAGIC ## Step 7: Register a SQL Function as a Trusted Asset
+# MAGIC ## Step 7: Register a SQL Function
 # MAGIC
 # MAGIC **Fixes:** Failing Question 5 (profit margin inconsistency).
 # MAGIC
-# MAGIC A SQL function registered in Unity Catalog can be added to a Genie Space as a trusted asset. When Genie uses it to answer a question, the result is labelled **Trusted** — the exact function logic runs every time, with no variation between attempts.
+# MAGIC A SQL function registered in Unity Catalog can be added to a Genie Space. The exact function logic runs every time, with no variation between attempts.
 # MAGIC
-# MAGIC The setup notebook created `fn_profit_margin(revenue DOUBLE, cost DOUBLE)` in your schema. Its function comment already explains when to use it — Genie reads that comment as context.
+# MAGIC > **Important:** Genie Spaces only support **table-valued functions** — functions whose `RETURNS` clause is `TABLE`. Scalar functions (which return a single value) cannot be added and will produce the error *"You must select a function that returns a table."*
+# MAGIC
+# MAGIC The setup notebook created `fn_profit_margin()` in your schema as a table-valued function. It queries `sales_orders` directly and returns profit margin grouped by product category. Its function comment already explains when to use it — Genie reads that comment as context.
 # MAGIC
 # MAGIC 1. Click **Configure > Instructions**.
 # MAGIC 2. Click the **SQL Queries** tab.
-# MAGIC 3. Click **Add SQL function** (this is a separate button from **Add SQL query**).
+# MAGIC 3. Next to the **Add** button click the **down arrow** and select **SQL function**.
 # MAGIC 4. In the function browser, navigate to your schema and select `fn_profit_margin`.
 # MAGIC 5. Click **Add** to register it in the space.
 # MAGIC 6. Click **Save**.
@@ -393,7 +391,7 @@
 # MAGIC **How to verify it worked:**
 # MAGIC
 # MAGIC In the chat, ask: *What is the profit margin for each product category?*
-# MAGIC Genie should call `fn_profit_margin(net_revenue, cost)` and return consistent results labelled **Trusted**. Click **Show more** in the response to confirm the function name and the comment explaining what it does.
+# MAGIC Genie should call `fn_profit_margin()` and return consistent results*. Click **Show more** in the response to confirm the function name and the comment explaining what it does.
 # MAGIC
 # MAGIC > Users of the space must have `EXECUTE` permission on the function in Unity Catalog. For this demo, you own the function, so no grant is needed. In production, grant `EXECUTE ON FUNCTION` to the appropriate group.
 # MAGIC
@@ -531,7 +529,7 @@
 # MAGIC | 2 | *Show me B2B sales* | Non-zero results. Check the SQL — it should filter `customers.segment = 'Corporate'` via the join. |
 # MAGIC | 3 | *What’s our AOV trend by quarter?* | Consistent formula: `SUM(net_revenue) / COUNT(DISTINCT order_id)` grouped by quarter. |
 # MAGIC | 4 | *Are we hitting our regional targets?* | Uses `sales_targets` in the join, returns actual vs target with a status column. |
-# MAGIC | 5 | *Show me profit margin by category* | Response is labelled **Trusted**. SQL calls `fn_profit_margin(net_revenue, cost)`. Click **Show more** to confirm the function name. |
+# MAGIC | 5 | *Show me profit margin by category* | SQL calls `fn_profit_margin(net_revenue, cost)`. Click **Show more** to confirm the function name. |
 # MAGIC
 # MAGIC **For each response:**
 # MAGIC * Click **Show code** to confirm the generated SQL matches the fix you applied.
@@ -556,12 +554,11 @@
 # MAGIC | SQL Expression (Measure: Profit, Profit Margin, AOV) | Questions 1 and 3 |
 # MAGIC | SQL Expression (Filter: B2B Orders) + column synonym | Question 2 |
 # MAGIC | Join relationship (sales_orders → sales_targets) + example query | Question 4 |
-# MAGIC | SQL function (fn_profit_margin) as trusted asset | Question 5 |
+# MAGIC | SQL function (fn_profit_margin) | Question 5 |
 # MAGIC
 # MAGIC Beyond the five fixes, the learner should now understand:
 # MAGIC
 # MAGIC * **SQL expressions beat text instructions** for anything that can be expressed as a formula, filter, or field definition — Genie applies SQL exactly, while text instructions are interpreted.
-# MAGIC * **Trusted assets** (parameterized queries and SQL functions) are the highest-confidence responses — the SQL runs verbatim and results are labelled Trusted.
 # MAGIC * **Prompt matching** solves value-level mismatches (abbreviations, synonyms, spelling) that SQL expressions alone cannot fix.
 # MAGIC * **Space-level tuning is scoped** — it only benefits this space. Use Unity Catalog column comments as a free baseline for all tools, and use metric views when measures need to be consistent across multiple spaces, dashboards, and teams.
 # MAGIC * **Knowledge mining** can suggest join relationships and SQL expressions automatically when Genie learns from author interactions — this reduces manual curation over time.

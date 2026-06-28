@@ -201,27 +201,42 @@ print(f"sales_targets: {df_targets.count()} rows created")
 # COMMAND ----------
 
 # DBTITLE 1,Create fn_profit_margin SQL function
-# MAGIC %sql
-# MAGIC -- =============================================================
-# MAGIC -- SQL FUNCTION: fn_profit_margin
-# MAGIC -- =============================================================
-# MAGIC -- A Unity Catalog scalar function that calculates gross profit margin
-# MAGIC -- as a percentage. Registered as a trusted asset in the Genie Space
-# MAGIC -- (Demo 2) so Genie uses verified logic when users ask about margin.
-# MAGIC --
-# MAGIC -- Sample questions this function is designed to answer:
-# MAGIC --   "What is the profit margin for each product category?"
-# MAGIC --   "Show me our margin across regions."
-# MAGIC --   "Which channel has the best gross margin?"
-# MAGIC
-# MAGIC CREATE OR REPLACE FUNCTION fn_profit_margin(revenue DOUBLE, cost DOUBLE)
-# MAGIC RETURNS DOUBLE
-# MAGIC COMMENT 'Calculates gross profit margin as a percentage: (revenue - cost) / revenue * 100. Returns NULL when revenue is zero or NULL. Round result as needed before display.'
-# MAGIC RETURN
-# MAGIC   CASE
-# MAGIC     WHEN revenue IS NULL OR revenue = 0 THEN NULL
-# MAGIC     ELSE ROUND((revenue - cost) / revenue * 100, 2)
-# MAGIC   END;
+# =============================================================
+# SQL FUNCTION: fn_profit_margin  (Table-Valued Function / TVF)
+# =============================================================
+# Genie Spaces require functions that RETURN TABLE — scalar functions
+# that return a single value cannot be added as trusted assets.
+#
+# This TVF queries sales_orders directly and returns profit margin
+# grouped by product category. Genie calls it as:
+#   SELECT * FROM fn_profit_margin()
+#
+# Sample questions this function is designed to answer:
+#   "What is the profit margin for each product category?"
+#   "Show me our margin breakdown."
+#   "Which category has the best gross margin?"
+
+spark.sql(f"""
+CREATE OR REPLACE FUNCTION `{catalog}`.`{schema}`.fn_profit_margin()
+RETURNS TABLE (
+  product_category   STRING,
+  total_revenue      DOUBLE,
+  total_cost         DOUBLE,
+  profit_margin_pct  DOUBLE
+)
+COMMENT 'Returns gross profit margin percentage by product category. Use when users ask about profit margin, margin percentage, or profitability by category. profit_margin_pct = (SUM(net_revenue) - SUM(cost)) / SUM(net_revenue) * 100.'
+RETURN
+  SELECT
+    product_category,
+    ROUND(SUM(net_revenue), 2)                                                          AS total_revenue,
+    ROUND(SUM(cost), 2)                                                                 AS total_cost,
+    ROUND((SUM(net_revenue) - SUM(cost)) / NULLIF(SUM(net_revenue), 0) * 100, 2)       AS profit_margin_pct
+  FROM `{catalog}`.`{schema}`.sales_orders
+  GROUP BY product_category
+  ORDER BY profit_margin_pct DESC
+""")
+
+print("fn_profit_margin (TVF) created successfully.")
 
 # COMMAND ----------
 
@@ -273,10 +288,12 @@ print("")
 print(f"Use this fully-qualified path in the Genie Space UI:")
 print(f"  {catalog}.{schema}.<table_name>")
 
-# --- Confirm SQL function exists ---
+# --- Confirm SQL function (TVF) exists ---
 try:
-    fn_check = spark.sql(f"SELECT `{catalog}`.`{schema}`.fn_profit_margin(1000.0, 400.0) AS margin").collect()
+    fn_check = spark.sql(f"SELECT * FROM `{catalog}`.`{schema}`.fn_profit_margin() LIMIT 3").collect()
     print(f"")
-    print(f"SQL function fn_profit_margin: OK (test result: {fn_check[0].margin}%)")
+    print(f"SQL function fn_profit_margin (TVF): OK ({len(fn_check)} rows returned)")
+    for row in fn_check:
+        print(f"  {row.product_category}: {row.profit_margin_pct}% margin")
 except Exception as e:
     print(f"\nWarning: fn_profit_margin not found or failed: {e}")

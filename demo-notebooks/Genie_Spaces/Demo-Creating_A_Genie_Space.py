@@ -92,6 +92,7 @@
 # MAGIC 5. Select `sales_orders`. A checkmark appears.
 # MAGIC 6. Select `customers`.
 # MAGIC 7. Select `vw_monthly_sales`.
+# MAGIC 1. Select `sales_targets`.
 # MAGIC 8. With all three objects checked, click **Create**.
 # MAGIC 9. Databricks opens the new Genie Space immediately and lands you on the chat screen.
 # MAGIC
